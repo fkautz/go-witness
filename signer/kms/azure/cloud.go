@@ -122,7 +122,7 @@ func normalizeCloudName(name string) string {
 // validateVaultURLForCloud checks if vault URL matches the cloud
 func validateVaultURLForCloud(vaultURL string, cloud CloudInfo) error {
 	if !strings.Contains(strings.ToLower(vaultURL), cloud.VaultDNSSuffix) {
-		return fmt.Errorf("vault URL %s doesn't match cloud %s (expected suffix: %s)", 
+		return fmt.Errorf("vault URL %s doesn't match cloud %s (expected suffix: %s)",
 			vaultURL, cloud.Name, cloud.VaultDNSSuffix)
 	}
 	return nil
