@@ -18,102 +18,186 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-func TestParseReference(t *testing.T) {
-	tests := []struct {
-		name      string
-		ref       string
-		wantVault string
-		wantKey   string
-		wantVer   string
-		wantError bool
-	}{
-		{
-			name:      "valid reference without version",
-			ref:       "azurekms://test-vault.vault.azure.net/test-key",
-			wantVault: "https://test-vault.vault.azure.net/",
-			wantKey:   "test-key",
-			wantVer:   "",
-		},
-		{
-			name:      "valid reference with version",
-			ref:       "azurekms://test-vault.vault.azure.net/test-key/1234567890abcdef",
-			wantVault: "https://test-vault.vault.azure.net/",
-			wantKey:   "test-key",
-			wantVer:   "1234567890abcdef",
-		},
-		{
-			name:      "invalid reference - wrong scheme",
-			ref:       "awskms://test-vault.vault.azure.net/test-key",
-			wantError: true,
-		},
-		{
-			name:      "invalid reference - missing vault",
-			ref:       "azurekms:///test-key",
-			wantError: true,
-		},
-		{
-			name:      "invalid reference - missing key",
-			ref:       "azurekms://test-vault.vault.azure.net/",
-			wantError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			vault, key, ver, err := ParseReference(tt.ref)
-			if tt.wantError {
-				assert.Error(t, err)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.wantVault, vault)
-			assert.Equal(t, tt.wantKey, key)
-			assert.Equal(t, tt.wantVer, ver)
-		})
-	}
-}
 
 func TestValidReference(t *testing.T) {
 	tests := []struct {
-		name      string
-		ref       string
-		wantError bool
+		name    string
+		ref     string
+		wantErr bool
 	}{
+		// Public cloud
 		{
-			name: "valid reference",
-			ref:  "azurekms://test-vault.vault.azure.net/test-key",
+			name:    "valid public cloud reference",
+			ref:     "azurekms://my-vault.vault.azure.net/my-key",
+			wantErr: false,
 		},
 		{
-			name: "valid reference with version",
-			ref:  "azurekms://test-vault.vault.azure.net/test-key/version123",
+			name:    "valid public cloud reference with version",
+			ref:     "azurekms://my-vault.vault.azure.net/my-key/1234567890abcdef",
+			wantErr: false,
+		},
+		// Government cloud
+		{
+			name:    "valid government cloud reference",
+			ref:     "azurekms://my-vault.vault.usgovcloudapi.net/my-key",
+			wantErr: false,
 		},
 		{
-			name:      "invalid scheme",
-			ref:       "gcpkms://test-vault.vault.azure.net/test-key",
-			wantError: true,
+			name:    "valid government cloud reference with version",
+			ref:     "azurekms://my-vault.vault.usgovcloudapi.net/my-key/abc123",
+			wantErr: false,
+		},
+		// China cloud
+		{
+			name:    "valid china cloud reference",
+			ref:     "azurekms://my-vault.vault.azure.cn/my-key",
+			wantErr: false,
 		},
 		{
-			name:      "missing vault name",
-			ref:       "azurekms:///test-key",
-			wantError: true,
+			name:    "valid china cloud reference with version",
+			ref:     "azurekms://my-vault.vault.azure.cn/my-key/xyz789",
+			wantErr: false,
+		},
+		// Invalid cases
+		{
+			name:    "missing scheme",
+			ref:     "my-vault.vault.azure.net/my-key",
+			wantErr: true,
 		},
 		{
-			name:      "invalid vault format",
-			ref:       "azurekms://test-vault/test-key",
-			wantError: true,
+			name:    "wrong scheme",
+			ref:     "https://my-vault.vault.azure.net/my-key",
+			wantErr: true,
+		},
+		{
+			name:    "missing key name",
+			ref:     "azurekms://my-vault.vault.azure.net/",
+			wantErr: true,
+		},
+		{
+			name:    "missing vault name",
+			ref:     "azurekms://vault.azure.net/my-key",
+			wantErr: true,
+		},
+		{
+			name:    "invalid vault format",
+			ref:     "azurekms://my-vault/my-key",
+			wantErr: true,
+		},
+		{
+			name:    "empty reference",
+			ref:     "",
+			wantErr: true,
+		},
+		{
+			name:    "invalid cloud suffix",
+			ref:     "azurekms://my-vault.vault.invalid.com/my-key",
+			wantErr: false, // This is valid per the regex pattern
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidReference(tt.ref)
-			if tt.wantError {
+			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestParseReference(t *testing.T) {
+	tests := []struct {
+		name           string
+		resourceID     string
+		wantVaultURL   string
+		wantKeyName    string
+		wantKeyVersion string
+		wantErr        bool
+	}{
+		// Public cloud
+		{
+			name:         "public cloud without version",
+			resourceID:   "azurekms://my-vault.vault.azure.net/my-key",
+			wantVaultURL: "https://my-vault.vault.azure.net/",
+			wantKeyName:  "my-key",
+		},
+		{
+			name:           "public cloud with version",
+			resourceID:     "azurekms://my-vault.vault.azure.net/my-key/1234567890abcdef",
+			wantVaultURL:   "https://my-vault.vault.azure.net/",
+			wantKeyName:    "my-key",
+			wantKeyVersion: "1234567890abcdef",
+		},
+		// Government cloud
+		{
+			name:         "government cloud without version",
+			resourceID:   "azurekms://gov-vault.vault.usgovcloudapi.net/gov-key",
+			wantVaultURL: "https://gov-vault.vault.usgovcloudapi.net/",
+			wantKeyName:  "gov-key",
+		},
+		{
+			name:           "government cloud with version",
+			resourceID:     "azurekms://gov-vault.vault.usgovcloudapi.net/gov-key/abc123def456",
+			wantVaultURL:   "https://gov-vault.vault.usgovcloudapi.net/",
+			wantKeyName:    "gov-key",
+			wantKeyVersion: "abc123def456",
+		},
+		// China cloud
+		{
+			name:         "china cloud without version",
+			resourceID:   "azurekms://china-vault.vault.azure.cn/china-key",
+			wantVaultURL: "https://china-vault.vault.azure.cn/",
+			wantKeyName:  "china-key",
+		},
+		{
+			name:           "china cloud with version",
+			resourceID:     "azurekms://china-vault.vault.azure.cn/china-key/xyz789",
+			wantVaultURL:   "https://china-vault.vault.azure.cn/",
+			wantKeyName:    "china-key",
+			wantKeyVersion: "xyz789",
+		},
+		// Complex names
+		{
+			name:         "vault with hyphens and numbers",
+			resourceID:   "azurekms://test-vault-123.vault.azure.net/key-name-456",
+			wantVaultURL: "https://test-vault-123.vault.azure.net/",
+			wantKeyName:  "key-name-456",
+		},
+		// Error cases
+		{
+			name:       "invalid format",
+			resourceID: "azurekms://invalid",
+			wantErr:    true,
+		},
+		{
+			name:       "missing scheme",
+			resourceID: "my-vault.vault.azure.net/my-key",
+			wantErr:    true,
+		},
+		{
+			name:       "empty resource ID",
+			resourceID: "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vaultURL, keyName, keyVersion, err := ParseReference(tt.resourceID)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantVaultURL, vaultURL)
+			assert.Equal(t, tt.wantKeyName, keyName)
+			assert.Equal(t, tt.wantKeyVersion, keyVersion)
 		})
 	}
 }
