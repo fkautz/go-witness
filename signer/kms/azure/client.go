@@ -113,7 +113,7 @@ type Option func(*azureClientOptions)
 func (a *azureClientOptions) Init() []registry.Configurer {
 	return []registry.Configurer{
 		registry.BoolConfigOption(
-			"azure-remote-verify",
+			"remote-verify",
 			"verify signature using Azure Key Vault remote verification. If false, the public key will be pulled from Azure Key Vault and verification will take place locally",
 			true,
 			func(sp signer.SignerProvider, verify bool) (signer.SignerProvider, error) {
