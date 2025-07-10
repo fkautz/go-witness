@@ -59,13 +59,15 @@ const (
 )
 
 var (
-	errKMSReference = errors.New("kms specification should be in the format azurekms://[VAULT_NAME].vault.azure.net/[KEY_NAME][/KEY_VERSION]")
+	errKMSReference = errors.New("kms specification should be in the format azurekms://[VAULT_NAME].<vault-dns-suffix>/[KEY_NAME][/KEY_VERSION]")
 
-	// URI format: azurekms://vault-name.vault.azure.net/key-name[/key-version]
+	// URI format: azurekms://vault-name.<vault-dns-suffix>/key-name[/key-version]
 	// Examples:
-	// - azurekms://my-vault.vault.azure.net/my-key
+	// - azurekms://my-vault.vault.azure.net/my-key (Azure Public)
+	// - azurekms://my-vault.vault.usgovcloudapi.net/my-key (Azure Government)
+	// - azurekms://my-vault.vault.azure.cn/my-key (Azure China)
 	// - azurekms://my-vault.vault.azure.net/my-key/1234567890abcdef
-	azureKMSRegex = regexp.MustCompile(`^azurekms://([^/]+\.vault\.azure\.net)/([^/]+)(?:/([^/]+))?$`)
+	azureKMSRegex = regexp.MustCompile(`^azurekms://([^/]+\.vault\.[^/]+)/([^/]+)(?:/([^/]+))?$`)
 	providerName  = fmt.Sprintf("kms-%s", strings.TrimSuffix(ReferenceScheme, "kms://"))
 )
 
@@ -178,14 +180,27 @@ func (a *azureClient) setupClient(ctx context.Context, ksp *kms.KMSSignerProvide
 		return fmt.Errorf("unable to find azure client options in azure kms signer provider")
 	}
 
+	// Get cloud configuration from vault URL
+	cloudInfo, err := GetCloudInfo(a.vaultURL)
+	if err != nil {
+		return fmt.Errorf("failed to determine cloud configuration: %w", err)
+	}
+
+	// Get client options for the cloud
+	clientOpts := GetClientOptions(cloudInfo)
+
 	// Use DefaultAzureCredential which supports multiple authentication methods
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+		ClientOptions: clientOpts,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to obtain Azure credential: %w", err)
 	}
 
-	// Create the Azure Key Vault client
-	a.client, err = azkeys.NewClient(a.vaultURL, cred, nil)
+	// Create the Azure Key Vault client with cloud-specific options
+	a.client, err = azkeys.NewClient(a.vaultURL, cred, &azkeys.ClientOptions{
+		ClientOptions: clientOpts,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create Azure Key Vault client: %w", err)
 	}
